@@ -34,8 +34,8 @@
 ;  вызывать только изнутри цикла рендеринга
 ;  mouse - тайл под курсором
 ;  creatures - кого рисуем
-(define (level:draw mouse creatures)
-   (interact 'level (tuple 'draw mouse creatures)))
+(define (level:draw creatures)
+   (interact 'level (tuple 'draw creatures)))
 
 
 ; -------------------------------
@@ -136,7 +136,7 @@
                                                 tile-height
                                                 tile-offsets
                                                 ; texcoords:
-                                                (vector
+                                                (tuple
                                                    (/ ul_x image-width)
                                                    (/ ul_y image-height)
                                                    (/ (+ ul_x tile-width) image-width)
@@ -172,7 +172,7 @@
                   (layers . ,layers)))))
 
             ; draw the level on the screen
-            ((draw mouse creatures); interact
+            ((draw creatures); interact
                (let ((w (getf itself 'tilewidth))
                      (h (getf itself 'tileheight))
                      (width (getf itself 'width))

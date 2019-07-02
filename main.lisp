@@ -23,7 +23,6 @@
 (glEnable GL_TEXTURE_2D)
 (define id ; OpenGL texture splash ID
    (SOIL_load_OGL_texture (c-string "media/konoha.jpg") SOIL_LOAD_RGBA SOIL_CREATE_NEW_ID 0))
-(print "id: " id)
 (glBindTexture GL_TEXTURE_2D id)
 (glBegin GL_QUADS)
    ; рисуем на весь экран квадратик с текстурой
@@ -67,14 +66,13 @@
 ;; (import (scheme misc))
 ;; (import (file xml))
 ;; (import (scheme dynamic-bindings))
-;; (import (lib rlutil))
+(import (lib rlutil))
 
 ; -=( level )=-----------------
 ;     заведует игровой картой
 ,load "nani/level.lisp"
-;; ;,load "animations.lisp"
 
-;; ,load "nani/creature.lisp"
+,load "nani/creature.lisp"
 ;; ,load "ai.lisp"
 
 ;; ;;; -=( creatures )=-----------------
@@ -98,14 +96,14 @@
 
 ;; ; =================================================================
 ;; ; -=( hero )=---------
-;; (define hero (make-creature 'hero #empty))
-;; ; зададим позицию героя в мире
+(define hero (make-creature 'hero #empty))
+; зададим позицию героя в мире
 ;; (creature:set-location 'hero (cons 28 33)) ; старый способ перемещения героя
-;; ((hero 'set-location) (cons 28 33))        ; новый способ перемещения героя - выбрать какой лучше
+((hero 'set-location) (cons 30 33))        ; новый способ перемещения героя - выбрать какой лучше
 
-;; ; зададим анимации герою, в нашем случае он будет выглядеть как скелет
-;; (creature:set-animations 'hero 'skeleton "animations/skeleton.ini")
-;; (creature:set-current-animation 'hero 'stance) ; пусть он просто стоит
+; зададим анимации герою, в нашем случае он будет выглядеть как скелет
+(creature:set-animations 'hero 'out "animations/out.ini")
+(creature:set-current-animation 'hero 'stance) ; пусть он просто стоит
 
 
 ;; ; -=( mobs )=-----------------
@@ -194,29 +192,29 @@
 (gl:set-renderer (lambda (mouse)
 ;;    ; тут мы поворачиваем нашего шероя в сторону мышки
 ;;    (unless (unbox calculating-world)
-;;       (let*((mousetile (xy:screen->tile mouse))
-;;             (herotile (creature:get-location 'hero))
-;;             (dx (- (car mousetile) (car herotile)))
-;;             (dy (- (cdr mousetile) (cdr herotile))))
-;;          (cond
-;;             ((and (= dx 0) (< dy 0))
-;;                (creature:set-orientation 'hero 0))
-;;             ((and (= dx 0) (> dy 0))
-;;                (creature:set-orientation 'hero 4))
-;;             ((and (< dx 0) (= dy 0))
-;;                (creature:set-orientation 'hero 6))
-;;             ((and (> dx 0) (= dy 0))
-;;                (creature:set-orientation 'hero 2))
+      (let*((mousetile (xy:screen->tile mouse))
+            (herotile (creature:get-location 'hero))
+            (dx (- (car mousetile) (car herotile)))
+            (dy (- (cdr mousetile) (cdr herotile))))
+         (cond
+            ((and (= dx 0) (< dy 0))
+               (creature:set-orientation 'hero 0))
+            ((and (= dx 0) (> dy 0))
+               (creature:set-orientation 'hero 4))
+            ((and (< dx 0) (= dy 0))
+               (creature:set-orientation 'hero 6))
+            ((and (> dx 0) (= dy 0))
+               (creature:set-orientation 'hero 2))
 
-;;             ((and (= dx +1) (= dy +1))
-;;                (creature:set-orientation 'hero 3))
-;;             ((and (= dx -1) (= dy +1))
-;;                (creature:set-orientation 'hero 5))
-;;             ((and (= dx -1) (= dy -1))
-;;                (creature:set-orientation 'hero 7))
-;;             ((and (= dx +1) (= dy -1))
-;;                (creature:set-orientation 'hero 1))
-;;          )))
+            ((and (= dx +1) (= dy +1))
+               (creature:set-orientation 'hero 3))
+            ((and (= dx -1) (= dy +1))
+               (creature:set-orientation 'hero 5))
+            ((and (= dx -1) (= dy -1))
+               (creature:set-orientation 'hero 7))
+            ((and (= dx +1) (= dy -1))
+               (creature:set-orientation 'hero 1))
+         ));)
 
 ;;    ; просто регулярные действия
 ;;    (let*((ss ms (clock))
@@ -247,9 +245,12 @@
 ;;    (define creatures (map (lambda (id)
 ;;          (tuple (interact id (tuple 'get-location)) (interact id (tuple 'get-animation-frame))))
 ;;       (interact 'creatures (tuple 'get 'monsters))))
-   (define creatures '()) ; todo: add a hera to the end of creatures list
+   (define creatures (list 
+      (tuple (interact 'hero (tuple 'get-location))
+             (interact 'hero (tuple 'get-animation-frame)))
+   )) ; todo: add a hera to the end of creatures list
 
-   (level:draw (if mouse (xy:screen->tile mouse)) creatures)
+   (level:draw #|(if mouse (xy:screen->tile mouse))|# creatures)
 
    ; окошки, консолька, etc.
    (render-windows)
@@ -260,7 +261,6 @@
             (tile (getf (level:get 'tileset)
                         (+ (level:get-gid 'pointer)
                            0)))
-            (_ (print tile))
 ;;                            (if (world-busy?) 1 0))))
 ;;                            ;; (cond
 ;;                            ;;    ((world-busy?) 1)
@@ -324,16 +324,16 @@
 
 
 
-;;    ; -------------
-;;    ; обработчик состояния клавиатуры
-;;    ;  внимание, это "состояние", а не "события"!
-;;    ;  посему можно обрабатывать сразу несколько нажатий клавиатуры одновременно
-;;    (if (key-pressed #x3d) (resize 0.9)) ;=
-;;    (if (key-pressed #x2d) (resize 1.1)) ;-
-;;    (if (key-pressed #xff53) (move +1 0)); right
-;;    (if (key-pressed #xff51) (move -1 0)); left
-;;    (if (key-pressed #xff52) (move 0 +1)); up
-;;    (if (key-pressed #xff54) (move 0 -1)); down
+   ; -------------
+   ; обработчик состояния клавиатуры
+   ;  внимание, это "состояние", а не "события"!
+   ;  посему можно обрабатывать сразу несколько нажатий клавиатуры одновременно
+   (if (key-pressed #x3d) (resize 0.9)) ;=
+   (if (key-pressed #x2d) (resize 1.1)) ;-
+   (if (key-pressed #xff53) (move +1 0)); right
+   (if (key-pressed #xff51) (move -1 0)); left
+   (if (key-pressed #xff52) (move 0 +1)); up
+   (if (key-pressed #xff54) (move 0 -1)); down
 
    #null))
 
