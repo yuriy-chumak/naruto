@@ -160,6 +160,19 @@
                                              (split-by-newline data))))
                                  #empty
                                  (xml-get-subtags level 'layer)))
+
+               (define npcs (fold (lambda (ff object)
+                                    (define id (string->number (xml-get-attribute object 'id #f) 10))
+                                    (define name (xml-get-attribute object 'name #f))
+                                    (define type (xml-get-attribute object 'type #f))
+                                    (define x (div (floor (string->number (xml-get-attribute object 'x #f) 10)) 32))
+                                    (define y (div (floor (string->number (xml-get-attribute object 'y #f) 10)) 32))
+                                    ;; (print "name: " name ", type: " type ", x/y: " x "/" y)
+
+                                    (put ff id (tuple name type x y)))
+                                 #empty
+                                 (xml-get-subtags (xml-get-subtag level 'objectgroup) 'object)))
+               ; ok
                (mail sender 'ok)
                ; парсинг и предвычисления закончены, запишем нужные параметры
                (this (fold (lambda (ff kv) (put ff (car kv) (cdr kv))) itself `(
@@ -169,6 +182,7 @@
                   (gids . ,gids)
                   (columns . ,columns)
                   (tileset . ,tileset)
+                  (npcs . ,npcs)
                   (layers . ,layers)))))
 
             ; draw the level on the screen

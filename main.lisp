@@ -71,9 +71,8 @@
 ; -=( level )=-----------------
 ;     заведует игровой картой
 ,load "nani/level.lisp"
-
 ,load "nani/creature.lisp"
-;; ,load "ai.lisp"
+,load "nani/ai.lisp"
 
 ;; ;;; -=( creatures )=-----------------
 ;; ;;;  'creatures - заведует всеми живыми(или оживленными) созданиями
@@ -98,15 +97,121 @@
 ;; ; -=( hero )=---------
 (define hero (make-creature 'hero #empty))
 ; зададим позицию героя в мире
-;; (creature:set-location 'hero (cons 28 33)) ; старый способ перемещения героя
 ((hero 'set-location) (cons 30 33))        ; новый способ перемещения героя - выбрать какой лучше
 
-; зададим анимации герою, в нашем случае он будет выглядеть как скелет
-(creature:set-animations 'hero 'out "animations/out.ini")
-(creature:set-current-animation 'hero 'stance) ; пусть он просто стоит
+; зададим анимации герою, в нашем случае он будет выглядеть как человек
+((hero 'set-animation-profile) 'skeleton "animations/skeleton.ini")
+((hero 'set-current-animation) 'stance) ; пусть он просто стоит
+
+((hero 'set) 'state ; задать машину состояний (сразу с текущим)
+   (letrec ((alive (lambda (this action) ; стоим и ничего не делаем
+               (print "alive...")
+               (if action (tuple-case action
+                  ((go to)
+                     ; если появилась цель движения - перейдем в новое состояние
+                     (let*((creature this)
+                           (to to)
+                           (hero ((creature 'get-location)))
+                           (move (A* collision-data hero to)))
+                        (print "creature: " creature)
+                        (print "move: " move)
+                        (if move (begin
+                           ; пошлем его в дорогу
+                           (creature:move-with-animation creature move 'run #f)
+                        ))))))
+                  #false)) ; стейт герою пока не меняем
+            (dead (lambda (this action)
+               (print "i'm dead!")
+               ; преследование
+               dead)))
+      ; initial state
+      alive))
+
+((hero 'set) 'health 100)
+
+; ----------------------------------------------------------------------------
+; -=( npcs )=-----------------
+(fork-server 'npcs (lambda ()
+   (let this ((all #null))
+   (let*((envelope (wait-mail))
+         (sender msg envelope))
+      (if msg
+         (this (cons msg all))
+         (begin
+            (mail sender all)
+            (this all)))))))
+
+(for-each (lambda (info)
+      (define npc (make-creature (car info) #empty))
+
+      ; машина состояний для npc
+      ((npc 'set) 'state ; задать машину состояний (сразу с текущим)
+         (letrec ((patrol (lambda (this action)
+                     ; пока патрулирование - это стояние на месте
+                     #false))
+
+                  ; -----------------------------------------------
+                  ; преследование героя:
+                  (pursuit (lambda (this action)
+                     (let*((creature this)
+                           (to ((hero 'get-location))) ; преследуем
+                           (me ((creature 'get-location)))
+                           (move (A* collision-data me to)))
+                        ;; (print "creature: " creature)
+                        (print "move: " move)
+                        (if move
+                           (print "move dist: " (inexact
+                              (sqrt (+
+                                       (* (car move) (car move))
+                                       (* (cdr move) (cdr move))
+                                    )))))
+
+                        ; todo: если расстояние меньше N - перейти в состояние "стреляю"
+                        ; todo: если расстояние больше M (или герой невидим) - перейти в состояние "патрулирую"
+                        ; todo: иначе идти к герою
+                        (if move
+                           (let ((delta (cons
+                                    (- (car to) (car me))
+                                    (- (cdr to) (cdr me)))))
+                              (print "delta: " delta)
+                              (cond
+                                 ((equal? delta '(0 . -1))
+                                    ((creature 'set-orientation) 0)
+                                    (creature:play-animation creature 'shoot #f))
+                                 ((equal? delta '(+1 . 0))
+                                    ((creature 'set-orientation) 2)
+                                    (creature:play-animation creature 'shoot #f)
+
+                                    ((hero 'set) 'health
+                                       (- ((hero 'get) 'health) 30))
+                                    (if (> ((hero 'get) 'health) 0)
+                                       (creature:play-animation hero 'hit #f)
+                                       (creature:play-animation hero 'die 'die)))
+
+                                 ((equal? delta '(0 . +1))
+                                    ((creature 'set-orientation) 4)
+                                    (creature:play-animation creature 'shoot #f))
+                                 ((equal? delta '(-1 . 0))
+                                    ((creature 'set-orientation) 6)
+                                    (creature:play-animation creature 'shoot #f))
+                                 (else
+                                    (creature:move-with-animation creature move 'run #f)))))
+                     #false)))
+; ...
+                  (fight (lambda (this action)
+                     ; попытка ударить игрока
+                     #false)))
+            ; initial state
+            pursuit))
+
+      ((npc 'set-location) (cons (ref (cdr info) 3) (ref (cdr info) 4)))
+      ((npc 'set-animation-profile) (string->symbol (ref (cdr info) 2)) (fold string-append "animations/" (list (ref (cdr info) 2) ".ini")))
+      ((npc 'set-current-animation) 'stance)
+
+      (mail 'npcs npc))
+   (ff->list (level:get 'npcs)))
 
 
-;; ; -=( mobs )=-----------------
 ;; ;,load "mob.lisp" ; стейт-машина скелета, в этом файле записано его поведение
 
 ;; (define monsters (iota 10 1000)) ; 10 монстров, начиная с номера 1000 (пускай мобы будут номерные)
@@ -186,35 +291,37 @@
 
 ;; ; служебные переменные
 ;; (define timestamp (box 0))
-;; (define calculating-world (box #false))
+(define calculating-world (box 0))
+(define (world-busy?)
+   (less? 0 (unbox calculating-world)))
 
 ; draw
 (gl:set-renderer (lambda (mouse)
 ;;    ; тут мы поворачиваем нашего шероя в сторону мышки
-;;    (unless (unbox calculating-world)
+   (unless (world-busy?)
       (let*((mousetile (xy:screen->tile mouse))
-            (herotile (creature:get-location 'hero))
+            (herotile ((hero 'get-location)))
             (dx (- (car mousetile) (car herotile)))
             (dy (- (cdr mousetile) (cdr herotile))))
          (cond
             ((and (= dx 0) (< dy 0))
-               (creature:set-orientation 'hero 0))
+               ((hero 'set-orientation) 0))
             ((and (= dx 0) (> dy 0))
-               (creature:set-orientation 'hero 4))
+               ((hero 'set-orientation) 4))
             ((and (< dx 0) (= dy 0))
-               (creature:set-orientation 'hero 6))
+               ((hero 'set-orientation) 6))
             ((and (> dx 0) (= dy 0))
-               (creature:set-orientation 'hero 2))
+               ((hero 'set-orientation) 2))
 
             ((and (= dx +1) (= dy +1))
-               (creature:set-orientation 'hero 3))
+               ((hero 'set-orientation) 3))
             ((and (= dx -1) (= dy +1))
-               (creature:set-orientation 'hero 5))
+               ((hero 'set-orientation) 5))
             ((and (= dx -1) (= dy -1))
-               (creature:set-orientation 'hero 7))
+               ((hero 'set-orientation) 7))
             ((and (= dx +1) (= dy -1))
-               (creature:set-orientation 'hero 1))
-         ));)
+               ((hero 'set-orientation) 1))
+         )))
 
 ;;    ; просто регулярные действия
 ;;    (let*((ss ms (clock))
@@ -245,9 +352,14 @@
 ;;    (define creatures (map (lambda (id)
 ;;          (tuple (interact id (tuple 'get-location)) (interact id (tuple 'get-animation-frame))))
 ;;       (interact 'creatures (tuple 'get 'monsters))))
-   (define creatures (list 
-      (tuple (interact 'hero (tuple 'get-location))
-             (interact 'hero (tuple 'get-animation-frame)))
+   (define creatures (append
+      (map (lambda (npc)
+            (tuple ((npc 'get-location))
+                  ((npc 'get-animation-frame))))
+         (interact 'npcs #false))
+      (list 
+         (tuple (interact 'hero (list 'get-location))
+               (interact 'hero (list 'get-animation-frame))))
    )) ; todo: add a hera to the end of creatures list
 
    (level:draw #|(if mouse (xy:screen->tile mouse))|# creatures)
@@ -260,8 +372,7 @@
       (let*(;(ms (mod (floor (/ (time-ms) 100)) 40))
             (tile (getf (level:get 'tileset)
                         (+ (level:get-gid 'pointer)
-                           0)))
-;;                            (if (world-busy?) 1 0))))
+                           (if (world-busy?) 1 0))))
 ;;                            ;; (cond
 ;;                            ;;    ((world-busy?) 1)
 ;;                            ;;    ((let ((xy (xy:screen->tile mouse)))
@@ -361,78 +472,89 @@
 ;;          ;(mail 'music (tuple 'shutdown))
 ;;          (halt 1))))) ; q - quit
 
-;; (gl:set-mouse-handler (lambda (button x y)
-;;    (print "mouse: " button " (" x ", " y ")")
-;;    (unless (unbox calculating-world) ; если мир сейчас не просчитывается (todo: оформить отдельной функцией)
-;;       (cond
-;;          ((eq? button 1)
-;;             (let ((tile (xy:screen->tile (cons x y))))
-;;                (set-car! calculating-world 42)
-;;                (mail 'game (tuple 'run tile))))
-;;          ((eq? button 3) ; ПКМ
-;;             (unless (unbox calculating-world) ; если мир сейчас не просчитывается (todo: оформить отдельной функцией)
-;;                (begin
-;;                   (set-car! calculating-world 42)
-;;                   (mail 'game (tuple 'turn)))))
-;;          (else
-;;             ; nothing
-;;             #true))
-;;    )))
+(gl:set-mouse-handler (lambda (button x y)
+   (print "mouse: " button " (" x ", " y ")")
+   (unless (world-busy?) ; если мир сейчас не просчитывается (todo: оформить отдельной функцией)
+      (cond
+         ((eq? button 1)
+            (set-car! calculating-world (+ (unbox calculating-world) 1))
+            (let ((tile (xy:screen->tile (cons x y))))
+               (mail 'game (tuple 'go tile))))
+         ;; ((eq? button 3) ; ПКМ
+         ;;    (set-car! calculating-world (+ (unbox calculating-world) 1))
+         ;;    (mail 'game (tuple 'turn)))
+         (else
+            ; nothing
+            #true))
+   )))
 
-;; (fork-server 'game (lambda ()
-;;    (let this ((itself #empty))
-;;    (let*((envelope (wait-mail))
-;;          (sender msg envelope))
-;;       (tuple-case msg
+(fork-server 'game (lambda ()
+   (let this ((itself #empty))
+   (let*((envelope (wait-mail))
+         (sender msg envelope))
+      (tuple-case msg
 ;;          ((turn)
-;;             ; 1. Каждому надо выдать некотрое количество action-points (сколько действий он может выполнить за ход)
-;;             ;  это, конечно же, зависит от npc - у каждого может быть разное
-;;             ; TBD.
+;;             (let ((creatures
+;;                      (sort (lambda (a b)
+;;                               (less? (car a) (car b)))
+;;                         (ff->list (interact 'creatures (tuple 'debug))))))
+;; ;;             ; 1. Каждому надо выдать некотрое количество action-points (сколько действий он может выполнить за ход)
+;; ;;             ;  это, конечно же, зависит от npc - у каждого может быть разное
+;; ;;             ; TBD.
 
-;;             ; 2. Отсортировать всех по уровню инициативности, то есть кто имеет право ударить первым
-;;             ;  это тоже зависит от npc
+;; ;;             ; 2. Отсортировать всех по уровню инициативности, то есть кто имеет право ударить первым
+;; ;;             ;  это тоже зависит от npc
 
-;;             ; 3. И только теперь подергать каждого - пусть походит
-;;             ;  причем следующего можно дергать только после того, как отработают все запланированные анимации хода
+;; ;;             ; 3. И только теперь подергать каждого - пусть походит
+;; ;;             ;  причем следующего можно дергать только после того, как отработают все запланированные анимации хода
 ;;             (for-each (lambda (creature)
-;;                   ; для тестов - пусть каждый скелет получает урон "-50"
-;;                   (ai:make-action creature 'damage 50))
-;;                (interact 'creatures (tuple 'get 'skeletons)))
-;;             (print "turn done.")
+;;                   (let*((creature (cdr creature))
+;;                         (state ((creature 'get) 'state))
+;;                         (_ (print "state: " state))
+;;                         (state (if state (state creature #false))))
+;;                      (if state
+;;                         ((creature 'set) 'state state))))
+;; ;;                   ; для тестов - пусть каждый скелет получает урон "-50"
+;; ;;                   (ai:make-action creature 'damage 50))
+;;                creatures)
 
 ;;             ; вроде все обработали, можно переходить в состояние "готов к следующему ходу"
-;;             (set-car! calculating-world #false)
-;;             (this itself))
-;;          ((fire-in-the-tile xy)
-;;             (for-each (lambda (creature)
-;;                   ; для тестов - пусть каждый скелет получает урон "-50"
-;;                   (if (equal? (interact creature (tuple 'get 'location)) xy)
-;;                      (ai:make-action creature 'damage 50)))
-;;                (interact 'creatures (tuple 'get 'skeletons)))
-;;             (set-car! calculating-world #false)
-;;             (this itself))
+;;             (set-car! calculating-world (- (unbox calculating-world) 1))
+;;             (this itself)))
+;; ;;          ((fire-in-the-tile xy)
+;; ;;             (for-each (lambda (creature)
+;; ;;                   ; для тестов - пусть каждый скелет получает урон "-50"
+;; ;;                   (if (equal? (interact creature (tuple 'get 'location)) xy)
+;; ;;                      (ai:make-action creature 'damage 50)))
+;; ;;                (interact 'creatures (tuple 'get 'skeletons)))
+;; ;;             (set-car! calculating-world #false)
+;; ;;             (this itself))
 
-;;          ((run to)
-;;             (let loop ()
-;;                (let*((hero (creature:get-location 'hero))
-;;                      (move (A* collision-data hero to)))
-;;                   (if move (begin
-;;                      ; повернем героя в ту сторону, куда он собрался идти
-;;                      (cond
-;;                         ((equal? move '(0 . -1))
-;;                            (creature:set-orientation 'hero 0))
-;;                         ((equal? move '(+1 . 0))
-;;                            (creature:set-orientation 'hero 2))
-;;                         ((equal? move '(0 . +1))
-;;                            (creature:set-orientation 'hero 4))
-;;                         ((equal? move '(-1 . 0))
-;;                            (creature:set-orientation 'hero 6)))
-;;                      ; и пошлем его в дорогу
-;;                      (creature:move-with-animation 'hero move 'run #f)
-;;                      (unless (equal? (creature:get-location 'hero) to)
-;;                         (loop))))))
-;;             (set-car! calculating-world #false)
-;;             (this itself))
-;;          (else
-;;             (print "logic: unhandled event: " msg)
-;;             (this itself)))))))
+         ((go to)
+            (print "go to " to)
+            (let*((creature (interact 'creatures (tuple 'get 'hero)))
+                  (state ((creature 'get) 'state))
+                  (state (if state (state creature (tuple 'go to)))))
+               (if state
+                  ((creature 'set) 'state state)))
+
+            ; а теперь пускай ходят npc
+            (let ((creatures
+                     (sort (lambda (a b)
+                              (less? a b)) ; todo: отсортировать по инициативности
+                        (interact 'npcs #false))))
+               (for-each (lambda (creature)
+                     ;; (print "NPC: " creature)
+                     (let*((creature creature)
+                           (state ((creature 'get) 'state))
+                           ;; (_ (print "NPC state: " state))
+                           (state (if state (state creature #false))))
+                        (if state
+                           ((creature 'set) 'state state))))
+                  creatures))
+
+            (set-car! calculating-world (- (unbox calculating-world) 1))
+            (this itself))
+         (else
+            (print "logic: unhandled event: " msg)
+            (this itself)))))))

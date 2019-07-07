@@ -1,60 +1,70 @@
 (import (file ini))
 (import (scheme misc))
 
-; поместить создание на карту
-(define (creature:set-location creature location)
-   (mail creature (tuple 'set-location location)))
-; получить положение создания
-(define (creature:get-location creature)
-   (interact creature (tuple 'get 'location)))
+;; ; поместить создание на карту
+;; (define (creature:set-location creature location)
+;;    (mail creature (tuple 'set-location location)))
+;; ; получить положение создания
+;; (define (creature:get-location creature)
+;;    (interact creature (tuple 'get 'location)))
 
 ; задать поворот в пространстве
-(define (creature:set-orientation creature orientation)
-   (mail creature (tuple 'set-orientation orientation)))
+;; (define (creature:set-orientation creature orientation)
+;;    (mail creature (tuple 'set-orientation orientation)))
 
 ; задать созданию набор анимаций (тайлсет, конфигурационный файл)
-(define (creature:set-animations creature name inifile)
-   (mail creature (tuple 'set-animations name inifile)))
+;; (define (creature:set-animation-profile creature tileset inifile)
+;;    (mail creature (tuple 'set-animation-profile tileset inifile)))
 
 ; выбрать созданию текущую анимацию по ее имени
-(define (creature:set-current-animation creature animation)
-   (interact creature (tuple 'set-current-animation animation)))
+;; (define (creature:set-current-animation creature animation)
+;;    (interact creature (tuple 'set-current-animation animation)))
 
-(define (creature:set-next-location creature location)
-   (mail creature (tuple 'set-next-location location)))
+;; (define (creature:set-next-location creature location)
+;;    (mail creature (tuple 'set-next-location location)))
 
 ; отыграть цикл анимации (с ожиданием)
 (define (creature:play-animation creature animation next-animation)
    (let ((started (time-ms))
-         (saved-animation (or next-animation (interact creature (tuple 'get 'animation))))
-         (duration (creature:set-current-animation creature animation)))
+         (saved-animation (or next-animation ((creature 'get) 'animation)))
+         (duration ((creature 'set-current-animation) animation)))
       (let loop ((unused #f))
          ;(print creature ": waiting for " (- (time-ms) started))
          (if (< (- (time-ms) started) duration)
             (loop (sleep 7))))
       (unless (eq? saved-animation animation)
          ; set next animation or restore saved
-         (creature:set-current-animation creature saved-animation))))
+         ((creature 'set-current-animation) saved-animation))))
 
 ; двигаться (с анимацией)
 (define (creature:move-with-animation creature move animation next-animation)
    (let ((started (time-ms))
-         (saved-animation (or next-animation (interact creature (tuple 'get 'animation))))
-         (location (creature:get-location creature))
-         (duration (creature:set-current-animation creature animation)))
-      (creature:set-next-location creature move)
+         (saved-animation (or next-animation ((creature 'get) 'animation)))
+         (location ((creature 'get-location)))
+         (duration ((creature 'set-current-animation) animation)))
+
+      (cond
+         ((equal? move '(0 . -1))
+            ((creature 'set-orientation) 0))
+         ((equal? move '(+1 . 0))
+            ((creature 'set-orientation) 2))
+         ((equal? move '(0 . +1))
+            ((creature 'set-orientation) 4))
+         ((equal? move '(-1 . 0))
+            ((creature 'set-orientation) 6)))
+      ((creature 'set-next-location) move)
       (let loop ((unused #f))
          ;(print creature ": waiting for " (- (time-ms) started))
          (if (< (- (time-ms) started) duration)
             (loop (sleep 7))))
       ;(creature:set-next-location creature #f)
-      (creature:set-location creature ; setting location automatically clears next-location
+      ((creature 'set-location) ; setting location automatically clears next-location
          (cons (+ (car location) (car move))
                (+ (cdr location) (cdr move))))
 
       (unless (eq? saved-animation animation)
          ; set next animation or restore saved
-         (creature:set-current-animation creature saved-animation))))
+         ((creature 'set-current-animation) saved-animation))))
 
 ; содержит список крич, где 0..N - npc, ну или по имени (например, 'hero - герой)
 (fork-server 'creatures (lambda ()
@@ -108,43 +118,92 @@
    (7 . 2)))) ;left-top
 (define speed 64) ; 1 tile per second
 
+(define-syntax make-setter
+   (syntax-rules (name)
+      ((make-setter (function this sender . args) . body)
+         (list (quote function)
+            (lambda (this sender . args)
+               . body)
+            (lambda all
+               (mail name (cons (quote function) all)))
+            ))))
+(define-syntax make-getter
+   (syntax-rules (name)
+      ((make-getter (function this sender . args) . body)
+         (list (quote function)
+            (lambda (this sender . args)
+               . body)
+            (lambda all
+               (interact name (cons (quote function) all)))
+            ))))
+
+
+;; (define-syntax make-creature-macro
+;;    (syntax-rules (SET)
+;;       ((make-creature-macro (SET (function this sender . args) . body) . rest)
+;;          (list (quote function)
+;;             (lambda (this sender . args)
+;;                . body)
+;;             (lambda all
+;;                (interact name (list->tuple (cons (quote function) all))))
+;;             ))))
+
 ; ----------------------------------
 ; todo: make automatic id generation
 ; создать новое "создание"
 (define (make-creature name initial)
-   (fork-server name (lambda ()
-   (let this ((itself initial))
-   (let*((envelope (wait-mail))
-         (sender msg envelope))
-      (tuple-case msg
-         ; low level interaction interface
-         ((set key value)
-            (this (put itself key value)))
-         ((get key)
-            (mail sender (get itself key #false))
-            (this itself))
-         ((debug)
-            (mail sender itself)
-            (this itself))
+(let*((I (fold (lambda (ff function)
+                        (cons
+                           (put (car ff) (car function) (cadr function))
+                           (put (cdr ff) (car function) (caddr function))))
+                  (cons initial #empty)
+                  (list
+         ; debug staff
+         (make-setter (set this sender key value)
+            (put this key value))
+         (make-getter (get this sender key)
+            (mail sender (get this key #f))
+            this)
+         (make-getter (debug this sender)
+            (mail sender this)
+            this)
 
-         ; ---------------------------------------------
-         ; блок обработки анимации
-         ; set animation
+
+         ; задать новое положение npc
+         (make-setter (set-location this sender xy)
+            (let*((this (put this 'location xy))
+                  (this (del this 'next-location)))
+               this))
+
+         (make-setter (set-next-location this sender xy)
+            (let*((this (put this 'next-location xy)))
+               this))
+
+         (make-setter (set-orientation this sender orientation)
+            (let*((this (put this 'orientation orientation)))
+               this))
+
+         (make-getter (get-location this sender)
+            (mail sender (get this 'location '(0 . 0)))
+            this)
+
+
+         ; конфигурирование анимации
          ;  задать имя тайловой карты и конфигурационный файл анимаций персонажа
-         ((set-animations name ini)
-            (let*((itself (put itself 'fg (level:get-gid name)))
-                  (itself (put itself 'animations (list->ff (ini-parse-file ini))))
-                  (itself (put itself 'columns (level:get-columns name))))
-               (this itself)))
+         (make-setter (set-animation-profile this sender name ini)
+            (let*((this (put this 'fg (level:get-gid name)))
+                  (this (put this 'animations (list->ff (ini-parse-file ini))))
+                  (this (put this 'columns (level:get-columns name))))
+               this))
 
-         ((set-current-animation animation)
+         (make-getter (set-current-animation this sender animation)
             ; set current animation (that will be changed, or not to default)
             ; return animation cycle time (for feature use by caller)
-            (let*((itself (put itself 'animation animation))
-                  (itself (put itself 'ssms (time-ms))))
+            (let*((this (put this 'animation animation))
+                  (this (put this 'ssms (time-ms))))
                ; сообщим вызывающему сколько будет длиться полный цикл анимации
                ; (так как у нас пошаговая игра, то вызывающему надо подождать пока проиграется цикл анимации)
-               (let*((animation-info (getf (get itself 'animations #empty) (getf itself 'animation)))
+               (let*((animation-info (getf (get this 'animations #empty) (getf this 'animation)))
                      (duration (getf animation-info 'duration))
                      (duration (substring duration 0 (- (string-length duration) 2)))
                      (duration (string->number duration 10))
@@ -160,14 +219,15 @@
                            (* 100 (+ frames frames -1))
                            (* 100 frames))
                   ))
-               (this itself)))
-         ((get-animation-frame)
+               this))
+         ; ...
+         (make-getter (get-animation-frame this sender)
             ; todo: change frames count according to animation type (and fix according math)
-            (let*((animation (get itself 'animation 'stance)) ; соответствующая состояния анимация
-                  (ssms (- (time-ms) (get itself 'ssms 0))) ; количество ms с момента перехода в анимацию
-                  (columns (get itself 'columns 32))
-                  (delta (getf itself 'next-location))
-                  (animations (get itself 'animations #empty))
+            (let*((animation (get this 'animation 'stance)) ; соответствующая состояния анимация
+                  (ssms (- (time-ms) (get this 'ssms 0))) ; количество ms с момента перехода в анимацию
+                  (columns (get this 'columns 32))
+                  (delta (getf this 'next-location))
+                  (animations (get this 'animations #empty))
                   (animation (get animations animation #empty))
                   (animation-type (get animation 'type #false))
                   (duration (get animation 'duration "250ms"))
@@ -187,7 +247,7 @@
 
                   (position (get animation 'position "4"))
                   (position (string->number position 10))
-                  (orientation (get itself 'orientation 0))
+                  (orientation (get this 'orientation 0))
                   (frame (floor (/ (* ssms frames) duration)))
 
                   (delta (if delta (let ((n (if (string-eq? animation-type "back_forth")
@@ -202,85 +262,31 @@
                      ((string-eq? animation-type "looped")
                         (mod frame frames))
                      ((string-eq? animation-type "back_forth")
-                        (lref (append (iota frames) (reverse (iota (- frames 2) 1))) (mod frame (+ frames frames -2)))))))
-               (mail sender (cons (+ (get itself 'fg 0) position
+                        (list-ref (append (iota frames) (reverse (iota (- frames 2) 1))) (mod frame (+ frames frames -2)))))))
+               (mail sender (cons (+ (get this 'fg 0) position
                   frame
                   (* columns (get orientations orientation 0)))
                   delta)))
-            (this itself))
+            this)
+      ))))
 
-         ; ---------------------------------------------
-         ((set-location xy)
-            (let*((itself (put itself 'location xy))
-                  (itself (del itself 'next-location)))
-               (this itself)))
-         ((set-next-location xy)
-            (let*((itself (put itself 'next-location xy)))
-               (this itself)))
-         ((set-orientation orientation)
-            (let*((itself (put itself 'orientation orientation)))
-               (this itself)))
+   (fork-server name (lambda ()
+   (let this ((itself (car I)))
+   (let*((envelope (wait-mail))
+         (sender msg envelope))
+      (let ((handler (get itself (car msg) #false)))
+         (unless handler
+            (print "Unhandled message " msg " from " sender))
+         (this (if handler
+            (apply handler (cons itself (cons sender (cdr msg))))
+            itself)))))))
 
-         ;; ((move-relative xy)
-         ;;    (let*((location (get itself 'location '(0 . 0)))
-         ;;          (itself (put itself 'location (cons (+ (car location) (car xy)) (+ (cdr location) (cdr xy)))))
-         ;;          (orientation (cond
-         ;;             ((equal? xy '(-1 . 0)) 6)
-         ;;             ((equal? xy '(0 . -1)) 0)
-         ;;             ((equal? xy '(+1 . 0)) 2)
-         ;;             ((equal? xy '(0 . +1)) 4)
-         ;;             (else (get itself 'orientation 0))))
-         ;;          (itself (put itself 'orientation orientation)))
-         ;;       (this itself)))
+   (define creature (ff-union (cdr I)
+      (list->ff (list
+         (cons 'name name)
+      )) (lambda (a b) a)))
 
-         ((get-location)
-            (mail sender (get itself 'location '(0 . 0)))
-            (this itself))
-
-         ;; ; ---------------------------------------------
-         ;; ; стейт-машина
-         ;; ; сложновата получается стейт-машина (, но что поделать..
-         ;; ((process-event event args)
-         ;;    ;(print "itself: " itself)
-         ;;    (let ((state (getf itself 'state))
-         ;;          (state-machine (or (getf itself 'state-machine) #empty)))
-         ;;       ;(print name ": state name: " state)
-         ;;       ;(print name ": state-machine: " state-machine)
-         ;;       (let*((state (get state-machine state #empty))
-         ;;             (handler (getf state event)))
-         ;;          ;(print name ": state: " state)
-         ;;          ;(print name ": handler: " handler " " args)
-         ;;          (print-to stderr name ": before " event " " args)
-         ;;          (if handler
-         ;;             (let*((itself state (apply handler (cons itself (cons name args)))))
-         ;;                ; ok, у нас новый стейт, да? надо запустить цикл смены стейта?
-         ;;                (print-to stderr name ": handled " event " " args)
-         ;;                (this (put itself 'state state)))
-         ;;             ; else
-         ;;             (begin
-         ;;                ; это сообщение пока оставляем, но вообще оно не надо,
-         ;;                ;  так как не все события надо обрабатывать
-         ;;                (print-to stderr name ": no handler found for " event " event")
-         ;;                (mail sender #false) ; просто индикатор, что не обрабатывали (на всякий случай)
-         ;;                (this itself))))))
-
-         ;; ((process-event-transition-tick)
-         ;;    (let ((action (getf itself 'action)))
-         ;;       (if action
-         ;;          (this (action itself))
-         ;;          (this itself))))
-
-         (else
-            (print "unhandled event: " msg)
-            (this itself)))))))
-   (define creature (list->ff (list
-      (cons 'set-location (lambda (location)
-         (creature:set-location name location)))
-      (cons 'get-location (lambda ()
-         (creature:get-location name)))
-      (cons 'set-orientation (lambda (orientation)
-         (creature:set-orientation name orientation)))
-      )))
+   ; добавим npc к общему списку npc
    (mail 'creatures (tuple 'set name creature))
-   creature)
+   creature))
 
