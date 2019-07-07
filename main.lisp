@@ -118,7 +118,15 @@
                         (if move (begin
                            ; пошлем его в дорогу
                            (creature:move-with-animation creature move 'run #f)
-                        ))))))
+                        ))))
+                  ((hit damage)
+                     ((this 'set) 'health
+                        (- ((this 'get) 'health) 30))
+                     (if (> ((this 'get) 'health) 0)
+                        (creature:play-animation this 'hit #f)
+                        (creature:play-animation this 'die 'die))) ; (return dead)
+                     ; ...
+                  ))
                   #false)) ; стейт герою пока не меняем
             (dead (lambda (this action)
                (print "i'm dead!")
@@ -169,7 +177,9 @@
                         ; todo: если расстояние меньше N - перейти в состояние "стреляю"
                         ; todo: если расстояние больше M (или герой невидим) - перейти в состояние "патрулирую"
                         ; todo: иначе идти к герою
-                        (if move
+                        (if (and
+                              move
+                              (> ((hero 'get) 'health) 0))
                            (let ((delta (cons
                                     (- (car to) (car me))
                                     (- (cdr to) (cdr me)))))
@@ -177,23 +187,20 @@
                               (cond
                                  ((equal? delta '(0 . -1))
                                     ((creature 'set-orientation) 0)
-                                    (creature:play-animation creature 'shoot #f))
+                                    (creature:play-animation creature 'shoot #f)
+                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
                                  ((equal? delta '(+1 . 0))
                                     ((creature 'set-orientation) 2)
                                     (creature:play-animation creature 'shoot #f)
-
-                                    ((hero 'set) 'health
-                                       (- ((hero 'get) 'health) 30))
-                                    (if (> ((hero 'get) 'health) 0)
-                                       (creature:play-animation hero 'hit #f)
-                                       (creature:play-animation hero 'die 'die)))
-
+                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
                                  ((equal? delta '(0 . +1))
                                     ((creature 'set-orientation) 4)
-                                    (creature:play-animation creature 'shoot #f))
+                                    (creature:play-animation creature 'shoot #f)
+                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
                                  ((equal? delta '(-1 . 0))
                                     ((creature 'set-orientation) 6)
-                                    (creature:play-animation creature 'shoot #f))
+                                    (creature:play-animation creature 'shoot #f)
+                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
                                  (else
                                     (creature:move-with-animation creature move 'run #f)))))
                      #false)))
@@ -298,7 +305,7 @@
 ; draw
 (gl:set-renderer (lambda (mouse)
 ;;    ; тут мы поворачиваем нашего шероя в сторону мышки
-   (unless (world-busy?)
+   (unless (world-busy?) (if (> ((hero 'get) 'health) 0)
       (let*((mousetile (xy:screen->tile mouse))
             (herotile ((hero 'get-location)))
             (dx (- (car mousetile) (car herotile)))
@@ -321,7 +328,7 @@
                ((hero 'set-orientation) 7))
             ((and (= dx +1) (= dy -1))
                ((hero 'set-orientation) 1))
-         )))
+         ))))
 
 ;;    ; просто регулярные действия
 ;;    (let*((ss ms (clock))
@@ -476,7 +483,7 @@
    (print "mouse: " button " (" x ", " y ")")
    (unless (world-busy?) ; если мир сейчас не просчитывается (todo: оформить отдельной функцией)
       (cond
-         ((eq? button 1)
+         ((and (eq? button 1) (> ((hero 'get) 'health) 0))
             (set-car! calculating-world (+ (unbox calculating-world) 1))
             (let ((tile (xy:screen->tile (cons x y))))
                (mail 'game (tuple 'go tile))))
