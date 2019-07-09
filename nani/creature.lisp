@@ -3,25 +3,25 @@
 
 ;; ; поместить создание на карту
 ;; (define (creature:set-location creature location)
-;;    (mail creature (tuple 'set-location location)))
+;;    (mail creature ['set-location location]))
 ;; ; получить положение создания
 ;; (define (creature:get-location creature)
-;;    (interact creature (tuple 'get 'location)))
+;;    (interact creature ['get 'location]))
 
 ; задать поворот в пространстве
 ;; (define (creature:set-orientation creature orientation)
-;;    (mail creature (tuple 'set-orientation orientation)))
+;;    (mail creature ['set-orientation orientation]))
 
 ; задать созданию набор анимаций (тайлсет, конфигурационный файл)
 ;; (define (creature:set-animation-profile creature tileset inifile)
-;;    (mail creature (tuple 'set-animation-profile tileset inifile)))
+;;    (mail creature ['set-animation-profile tileset inifile]))
 
 ; выбрать созданию текущую анимацию по ее имени
 ;; (define (creature:set-current-animation creature animation)
-;;    (interact creature (tuple 'set-current-animation animation)))
+;;    (interact creature ['set-current-animation animation]))
 
 ;; (define (creature:set-next-location creature location)
-;;    (mail creature (tuple 'set-next-location location)))
+;;    (mail creature ['set-next-location location]))
 
 ; отыграть цикл анимации (с ожиданием)
 (define (creature:play-animation creature animation next-animation)
@@ -71,19 +71,19 @@
    (let this ((itself #empty))
       (let*((envelope (wait-mail))
             (sender msg envelope))
-         (tuple-case msg
+         (case msg
             ; low level interaction interface
-            ((set key data)
+            (['set key data]
                (let ((itself (put itself key data)))
                   (this itself)))
-            ((get key)
+            (['get key]
                (mail sender (get itself key #false))
                (this itself))
-            ((debug)
+            (['debug]
                (mail sender itself)
                (this itself))
 
-            ((ready?)
+            (['ready?]
                ; вот тут надо посетить каждого из npc и просто сделать ему interact,
                ; это позволит убедиться, что все npc закончили обдумывать свои дела
                ; и их наконец то можно рисовать
@@ -91,9 +91,9 @@
                   (ff-fold (lambda (* key value)
                               (cond
                                  ((list? value)
-                                    (for-each (lambda (id) (interact id (tuple 'debug))) value))
+                                    (for-each (lambda (id) (interact id ['debug])) value))
                                  ((symbol? value)
-                                    (interact value (tuple 'debug)))
+                                    (interact value ['debug]))
                                  (else
                                     (print "unknown creature: " value)))
                               #true)
@@ -287,6 +287,6 @@
       )) (lambda (a b) a)))
 
    ; добавим npc к общему списку npc
-   (mail 'creatures (tuple 'set name creature))
+   (mail 'creatures ['set name creature])
    creature))
 

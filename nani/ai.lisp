@@ -28,7 +28,7 @@
    (unless (equal? from to) ; если не пришли
       (let step1 ((n 999) ; максимальное количество шагов поиска
                   (c-list-set #empty)
-                  (o-list-set (put #empty (hash from)  (tuple from #f  0 0 0))))
+                  (o-list-set (put #empty (hash from)  [from #f  0 0 0])))
          (unless (empty? o-list-set) ; есть еще куда идти?
             ; найдем клетку с минимальной стоимостью:
             (let*((f (ff-fold (lambda (s key value)
@@ -50,7 +50,7 @@
                      (let*((parent (ref (get c-list-set (hash xy) #f) 2)) ; todo: переделать
                            (parent-of-parent (ref (get c-list-set (hash parent) #f) 2)))
                         (if parent-of-parent (rev parent)
-                           (cons ;(tuple
+                           (cons ;[
                               (- (car xy) (car parent))
                               (- (cdr xy) (cdr parent))
                               ;c-list-set
@@ -80,11 +80,11 @@
                                              ; если эта клетка уже в списке
                                              (if got
                                                 (if (< G (ref got 3)) ; но наш путь короче
-                                                   (put n (hash v)  (tuple v xy  G H (+ G H)))
+                                                   (put n (hash v)  [v xy  G H (+ G H)])
                                                    ;else ничего не делаем
                                                    n)
                                                 ; else
-                                                (put n (hash v)  (tuple v xy  G H (+ G H)))))
+                                                (put n (hash v)  [v xy  G H (+ G H)])))
                                           n))
                                        o-list-set (list
                                                       (cons x (- y 1))
@@ -95,8 +95,8 @@
 
 ; =================================================================
 (define (ai:make-action creature action . args)
-   (let ((state (interact creature (tuple 'get 'state)))
-         (state-machine (or (interact creature (tuple 'get 'state-machine)) #empty)))
+   (let ((state (interact creature ['get 'state]))
+         (state-machine (or (interact creature ['get 'state-machine]) #empty)))
       (print "state: " state)
       (print "state-machine: " state-machine)
 
@@ -105,7 +105,7 @@
          (print "handler: " handler)
          (let ((state (apply handler (cons creature args))))
             (print "new-state: " state)
-            (if state (mail creature (tuple 'set 'state state))))
+            (if state (mail creature ['set 'state state])))
          (print "ok."))))
 
 ; =================================================================
@@ -120,11 +120,11 @@
 (define (got-damage creature damage)
    (print creature ": got-damage " damage)
    ; пока просто будем отнимать урон от здоровья, без всякой умной логики
-   (let*((life (or (interact creature (tuple 'get 'life)) 100))
+   (let*((life (or (interact creature ['get 'life]) 100))
          (life (- life damage)))
       ; todo: рисуем партикл "- ХХХ" или "miss"
       (print "damage done: " damage ", now life is: " life)
-      (mail creature (tuple 'set 'life life))
+      (mail creature ['set 'life life])
       (cond
          ((eq? damage 0) ; если нету урона, ничего не делаем
             #false)
@@ -159,9 +159,9 @@
       (tick . ,do-nothing)
       ;; (tick . ,(lambda (creature)
       ;;    ; пускай наш дорогой скелет поищет путь к сундуку и попытается его ударить
-      ;;    (define location (interact creature (tuple 'get-location))) ; текущее положение npc
-      ;;    (define chest (interact 'chest (tuple 'get-location))) ; положение сундука (в будущем - героя)
-      ;;    ; moveq - возможное направление к сундуку, (tuple x y служебная-информация)
+      ;;    (define location (interact creature ['get-location])) ; текущее положение npc
+      ;;    (define chest (interact 'chest ['get-location])) ; положение сундука (в будущем - героя)
+      ;;    ; moveq - возможное направление к сундуку, [x y служебная-информация]
       ;;    (define moveq
       ;;       (A* collision-data
       ;;          (car location) (cdr location)

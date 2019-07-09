@@ -32,7 +32,7 @@
       '((0 . 0) (1 . 0) (1 . 1) (0 . 1)))
 (glEnd)
 (glDisable GL_TEXTURE_2D)
-(gl:SwapBuffers (interact 'opengl (tuple 'get 'context))) ; todo: make a function
+(gl:SwapBuffers (interact 'opengl ['get 'context])) ; todo: make a function
 (glDeleteTextures 1 (list id)) ; и спокойно удалим сплеш текстуру
 
 ; -------------------------------------------------------
@@ -106,8 +106,8 @@
 ((hero 'set) 'state ; задать машину состояний (сразу с текущим)
    (letrec ((alive (lambda (this action) ; стоим и ничего не делаем
                (print "alive...")
-               (if action (tuple-case action
-                  ((go to)
+               (if action (case action
+                  (['go to]
                      ; если появилась цель движения - перейдем в новое состояние
                      (let*((creature this)
                            (to to)
@@ -119,7 +119,7 @@
                            ; пошлем его в дорогу
                            (creature:move-with-animation creature move 'run #f)
                         ))))
-                  ((hit damage)
+                  (['hit damage]
                      ((this 'set) 'health
                         (- ((this 'get) 'health) 30))
                      (if (> ((this 'get) 'health) 0)
@@ -188,19 +188,19 @@
                                  ((equal? delta '(0 . -1))
                                     ((creature 'set-orientation) 0)
                                     (creature:play-animation creature 'shoot #f)
-                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
+                                    (((hero 'get) 'state) hero ['hit 30]))
                                  ((equal? delta '(+1 . 0))
                                     ((creature 'set-orientation) 2)
                                     (creature:play-animation creature 'shoot #f)
-                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
+                                    (((hero 'get) 'state) hero ['hit 30]))
                                  ((equal? delta '(0 . +1))
                                     ((creature 'set-orientation) 4)
                                     (creature:play-animation creature 'shoot #f)
-                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
+                                    (((hero 'get) 'state) hero ['hit 30]))
                                  ((equal? delta '(-1 . 0))
                                     ((creature 'set-orientation) 6)
                                     (creature:play-animation creature 'shoot #f)
-                                    (((hero 'get) 'state) hero (tuple 'hit 30)))
+                                    (((hero 'get) 'state) hero ['hit 30]))
                                  (else
                                     (creature:move-with-animation creature move 'run #f)))))
                      #false)))
@@ -217,40 +217,6 @@
 
       (mail 'npcs npc))
    (ff->list (level:get 'npcs)))
-
-
-;; ;,load "mob.lisp" ; стейт-машина скелета, в этом файле записано его поведение
-
-;; (define monsters (iota 10 1000)) ; 10 монстров, начиная с номера 1000 (пускай мобы будут номерные)
-;; (for-each (lambda (id)
-;;       (make-creature id #empty)) ; создаем их
-;;    monsters)
-;; (mail 'creatures (tuple 'set 'monsters monsters)) ; и сохраним в списке всех npc
-
-;; ; теперь поместим монстров в случайные места на карте
-;; (for-each (lambda (id)
-;;       ; поиск свободного места
-;;       (let loop ()
-;;          (let ((x (rand! W))
-;;                (y (rand! H)))
-;;             (if (eq? 0 (at x y))
-;;                (begin
-;;                   (creature:set-location id (cons x y))
-;;                   (creature:set-orientation id (rand! 8))
-
-;;                   (creature:set-animations id 'goblin "animations/goblin.ini")
-;;                   (creature:set-current-animation id 'stance))
-;;                (loop)))))
-;;    monsters)
-
-;; ;; ; зададим скелетонам машину состояний и пусть все пока спят
-;; ;; (for-each (lambda (id)
-;; ;;       (mail id (tuple 'set 'state-machine default-mob-state-machine))) ; state machine
-;; ;;    monsters)
-;; ;; ; set initial state
-;; ;; (for-each (lambda (id)
-;; ;;       (mail id (tuple 'set 'state 'sleeping))) ; initial state
-;; ;;    monsters)
 
 ;; ; --------------------------------------------------------------------
 ;; ; окно, через которое мы смотрим на мир
@@ -304,7 +270,7 @@
 
 ; draw
 (gl:set-renderer (lambda (mouse)
-;;    ; тут мы поворачиваем нашего шероя в сторону мышки
+   ; тут мы поворачиваем нашего шероя в сторону мышки
    (unless (world-busy?) (if (> ((hero 'get) 'health) 0)
       (let*((mousetile (xy:screen->tile mouse))
             (herotile ((hero 'get-location)))
@@ -343,8 +309,8 @@
 ;;             ;; ; события нипов пускай остаются асинхронными,
 ;;             ;; ; просто перед рисованием убедимся что они все закончили свою работу
 ;;             ;; (for-each (lambda (id)
-;;             ;;       (mail id (tuple 'process-event-transition-tick)))
-;;             ;;    (interact 'creatures (tuple 'get 'skeletons)))
+;;             ;;       (mail id ['process-event-transition-tick]))
+;;             ;;    (interact 'creatures ['get 'skeletons]))
 ;;          )))
 
    ; теперь можем и порисовать: очистим окно и подготовим оконную математику
@@ -355,19 +321,16 @@
    (glEnable GL_TEXTURE_2D)
    (glEnable GL_BLEND)
 
-;;    ; теперь попросим уровень отрисовать себя
-;;    (define creatures (map (lambda (id)
-;;          (tuple (interact id (tuple 'get-location)) (interact id (tuple 'get-animation-frame))))
-;;       (interact 'creatures (tuple 'get 'monsters))))
+   ; теперь попросим уровень отрисовать себя
    (define creatures (append
       (map (lambda (npc)
-            (tuple ((npc 'get-location))
-                  ((npc 'get-animation-frame))))
+            [ ((npc 'get-location))
+              ((npc 'get-animation-frame))])
          (interact 'npcs #false))
-      (list 
-         (tuple (interact 'hero (list 'get-location))
-               (interact 'hero (list 'get-animation-frame))))
-   )) ; todo: add a hera to the end of creatures list
+      (list
+         [ (interact 'hero (list 'get-location))
+           (interact 'hero (list 'get-animation-frame))])
+   ))
 
    (level:draw #|(if mouse (xy:screen->tile mouse))|# creatures)
 
@@ -476,7 +439,7 @@
 ;;    (print "key: " key)
 ;;    (case key
 ;;       (#x18
-;;          ;(mail 'music (tuple 'shutdown))
+;;          ;(mail 'music ['shutdown])
 ;;          (halt 1))))) ; q - quit
 
 (gl:set-mouse-handler (lambda (button x y)
@@ -486,10 +449,10 @@
          ((and (eq? button 1) (> ((hero 'get) 'health) 0))
             (set-car! calculating-world (+ (unbox calculating-world) 1))
             (let ((tile (xy:screen->tile (cons x y))))
-               (mail 'game (tuple 'go tile))))
+               (mail 'game ['go tile])))
          ;; ((eq? button 3) ; ПКМ
          ;;    (set-car! calculating-world (+ (unbox calculating-world) 1))
-         ;;    (mail 'game (tuple 'turn)))
+         ;;    (mail 'game ['turn]))
          (else
             ; nothing
             #true))
@@ -499,12 +462,12 @@
    (let this ((itself #empty))
    (let*((envelope (wait-mail))
          (sender msg envelope))
-      (tuple-case msg
-;;          ((turn)
+      (case msg
+;;          (['turn]
 ;;             (let ((creatures
 ;;                      (sort (lambda (a b)
 ;;                               (less? (car a) (car b)))
-;;                         (ff->list (interact 'creatures (tuple 'debug))))))
+;;                         (ff->list (interact 'creatures ['debug])))))
 ;; ;;             ; 1. Каждому надо выдать некотрое количество action-points (сколько действий он может выполнить за ход)
 ;; ;;             ;  это, конечно же, зависит от npc - у каждого может быть разное
 ;; ;;             ; TBD.
@@ -531,17 +494,17 @@
 ;; ;;          ((fire-in-the-tile xy)
 ;; ;;             (for-each (lambda (creature)
 ;; ;;                   ; для тестов - пусть каждый скелет получает урон "-50"
-;; ;;                   (if (equal? (interact creature (tuple 'get 'location)) xy)
+;; ;;                   (if (equal? (interact creature ['get 'location]) xy)
 ;; ;;                      (ai:make-action creature 'damage 50)))
-;; ;;                (interact 'creatures (tuple 'get 'skeletons)))
+;; ;;                (interact 'creatures ['get 'skeletons]))
 ;; ;;             (set-car! calculating-world #false)
 ;; ;;             (this itself))
 
-         ((go to)
+         (['go to]
             (print "go to " to)
-            (let*((creature (interact 'creatures (tuple 'get 'hero)))
+            (let*((creature (interact 'creatures ['get 'hero]))
                   (state ((creature 'get) 'state))
-                  (state (if state (state creature (tuple 'go to)))))
+                  (state (if state (state creature ['go to]))))
                (if state
                   ((creature 'set) 'state state)))
 

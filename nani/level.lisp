@@ -9,33 +9,33 @@
 ; загрузить уровень
 ;  filename: имя xml файла в формате TILED
 (define (level:load filename)
-   (interact 'level (tuple 'load filename)))
+   (interact 'level ['load filename]))
 
 ; получить характеристику уровня
 ; список:
 ;  'tileheight: высота тайла в пикселях
 ;  'tilewidth: ширина тайла в пикселях
 (define (level:get property)
-   (interact 'level (tuple 'get property)))
+   (interact 'level ['get property]))
 
 ; получить слой уровня по имени
 (define (level:get-layer name)
-   (getf (interact 'level (tuple 'get 'layers)) name))
+   (getf (interact 'level ['get 'layers]) name))
 
 ; получить первый номер тайла, ассоциированный с тайлсетом name
 (define (level:get-gid name)
-   (getf (interact 'level (tuple 'get 'gids)) name))
+   (getf (interact 'level ['get 'gids]) name))
 
 ; возвращает количество тайлов в одной строке тайлсета name
 (define (level:get-columns name)
-   (getf (interact 'level (tuple 'get 'columns)) name))
+   (getf (interact 'level ['get 'columns]) name))
 
 ; нарисовать уровень
 ;  вызывать только изнутри цикла рендеринга
 ;  mouse - тайл под курсором
 ;  creatures - кого рисуем
 (define (level:draw creatures)
-   (interact 'level (tuple 'draw creatures)))
+   (interact 'level ['draw creatures]))
 
 
 ; -------------------------------
@@ -56,20 +56,20 @@
    (let this ((itself #empty))
       (let*((envelope (wait-mail))
             (sender msg envelope))
-         (tuple-case msg
+         (case msg
             ; low level interaction interface
-            ((set key value)
+            (['set key value]
                (let ((itself (put itself key value)))
                   (this itself)))
-            ((get key)
+            (['get key]
                (mail sender (get itself key #false))
                (this itself))
-            ((debug)
+            (['debug]
                (mail sender itself)
                (this itself))
 
             ; загрузить новую карту
-            ((load filename)
+            (['load filename]
                (for-each display (list "Loading new level '" filename "'... "))
                (define xml (xml-parse-file filename))
                (define level (car (xml-get-value xml))) ; use <map>
@@ -130,17 +130,17 @@
                                     (map (lambda (col)
                                           (let ((ul_x (* col tile-width))
                                                 (ul_y (* row tile-height)))
-                                             (tuple
+                                             [
                                                 id ; texture id
                                                 tile-width
                                                 tile-height
                                                 tile-offsets
                                                 ; texcoords:
-                                                (tuple
+                                                [
                                                    (/ ul_x image-width)
                                                    (/ ul_y image-height)
                                                    (/ (+ ul_x tile-width) image-width)
-                                                   (/ (+ ul_y tile-height) image-height)))))
+                                                   (/ (+ ul_y tile-height) image-height)]]))
                                        (iota columns)))
                                  (iota (/ tile-count columns)))))
                            (list->ff (map cons
@@ -169,7 +169,7 @@
                                     (define y (div (floor (string->number (xml-get-attribute object 'y #f) 10)) 32))
                                     ;; (print "name: " name ", type: " type ", x/y: " x "/" y)
 
-                                    (put ff id (tuple name type x y)))
+                                    (put ff id [name type x y]))
                                  #empty
                                  (xml-get-subtags (xml-get-subtag level 'objectgroup) 'object)))
                ; ok
@@ -186,7 +186,7 @@
                   (layers . ,layers)))))
 
             ; draw the level on the screen
-            ((draw creatures); interact
+            (['draw creatures]; interact
                (let ((w (getf itself 'tilewidth))
                      (h (getf itself 'tileheight))
                      (width (getf itself 'width))
@@ -266,8 +266,8 @@
                   ;   рисовать мы их будем все вместе - слой "object" и наших creatures
                   (define object-data ((itself 'layers) 'object))
                   ;; (draw-layer object-data (append creatures (list
-                  ;;    (tuple (interact 'hero (tuple 'get-location))
-                  ;;           (interact 'hero (tuple 'get-animation-frame)))
+                  ;;    [ (interact 'hero ['get-location])
+                  ;;      (interact 'hero ['get-animation-frame])]
                   ;; )))
                   (draw-layer object-data creatures)
 
