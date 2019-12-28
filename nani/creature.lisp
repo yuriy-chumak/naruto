@@ -107,7 +107,7 @@
 
 ; --------------------------
 ; имеет отношение к анимации:
-(define orientations (list->ff `(
+(define orientations (pairs->ff `(
    (0 . 3) ; top
    (1 . 4) ; top-right
    (2 . 5) ; right
@@ -192,7 +192,7 @@
          ;  задать имя тайловой карты и конфигурационный файл анимаций персонажа
          (make-setter (set-animation-profile this sender name ini)
             (let*((this (put this 'fg (level:get-gid name)))
-                  (this (put this 'animations (list->ff (ini-parse-file ini))))
+                  (this (put this 'animations (pairs->ff (ini-parse-file ini))))
                   (this (put this 'columns (level:get-columns name))))
                this))
 
@@ -282,7 +282,7 @@
             itself)))))))
 
    (define creature (ff-union (cdr I)
-      (list->ff (list
+      (pairs->ff (list
          (cons 'name name)
       )) (lambda (a b) a)))
 

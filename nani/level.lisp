@@ -87,12 +87,12 @@
 
                (define tilesets (xml-get-subtags level 'tileset))
 
-               (define gids (list->ff (map (lambda (tileset)
+               (define gids (pairs->ff (map (lambda (tileset)
                      (cons
                         (string->symbol (xml-get-attribute tileset 'name "noname"))
                         (string->number (xml-get-attribute tileset 'firstgid "0") 10)))
                   tilesets)))
-               (define columns (list->ff (map (lambda (tileset)
+               (define columns (pairs->ff (map (lambda (tileset)
                      (cons
                         (string->symbol (xml-get-attribute tileset 'name "noname"))
                         (/;(string->number (xml-get-attribute tileset 'columns "0") 10)) <- old code
@@ -143,7 +143,7 @@
                                                    (/ (+ ul_y tile-height) image-height)]]))
                                        (iota columns)))
                                  (iota (/ tile-count columns)))))
-                           (list->ff (map cons
+                           (pairs->ff (map cons
                                  (iota (length tiles) first-gid)
                                  tiles))))
                      tilesets)))

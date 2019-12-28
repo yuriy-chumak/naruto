@@ -9,21 +9,11 @@
    (define (hash xy)
       (+ (<< (car xy) 16) (cdr xy)))
 
-   ; пуста ли клетка карты "в голове" персонажа, работает для любых координат, даже отрицательных
+   ; пуста ли клетка карты, работает для любых координат, даже отрицательных
    (define (floor? x y)
-      (let by-y ((y y) (map level))
-         (cond
-            ((< y 0) #true)
-            ((null? map) #true)
-            ((= y 0)
-               (let by-x ((x x) (map (car map)))
-                  (if (< x 0) #true
-                  (if (null? map) #true
-                  (if (= x 0)
-                     (eq? (car map) 0)
-                  (by-x (- x 1) (cdr map)))))))
-            (else
-               (by-y (- y 1) (cdr map))))))
+      (let ((line (lref level y)))
+         (if (pair? line)
+            (eq? (lref line x) 0))))
 
    (unless (equal? from to) ; если не пришли
       (let step1 ((n 999) ; максимальное количество шагов поиска
@@ -135,28 +125,28 @@
             'dead))))
 
 ; машина состояний
-(define default-mob-state-machine (list->ff `(
+(define default-mob-state-machine {
    ; состояние "сплю"
-   (sleeping . ,(list->ff `(
+   'sleeping {
       ; обычный регулярный мировой тик (а нужен ли?)
-      (tick . ,do-nothing)
+      'tick do-nothing
 
       ; до npc долетел какой-то звук (todo: добавить направление, возможно)
-      (sound . ,(lambda (creature sound-level) ; сила звука, в дБ
+      'sound (lambda (creature sound-level) ; сила звука, в дБ
             ; так как спим, то реагируем только на действительно сильные звуки
             (if (> sound-level 60)
                (begin
                   ; проиграть анимацию "встаю" (эта функция выйдет после того, как анимация закончится)
                   (creature:play-animation creature 'swing #f)
                   ; перейти в режим преследования, иначе спим дальше
-                  'pursuit))))
+                  'pursuit)))
 
       ; нам нанесли урон
-      (damage . ,got-damage))))
+      'damage got-damage}
 
    ; режим преследования
-   (pursuit . ,(list->ff `(
-      (tick . ,do-nothing)
+   'pursuit {
+      'tick do-nothing
       ;; (tick . ,(lambda (creature)
       ;;    ; пускай наш дорогой скелет поищет путь к сундуку и попытается его ударить
       ;;    (define location (interact creature ['get-location])) ; текущее положение npc
@@ -182,15 +172,15 @@
       ;;    (values itself 'pursuit))))
 
       ; до нпс долетел звук (пофиг на звуки)
-      (sound . ,do-nothing)
+      'sound do-nothing
       ; нпс нанесен урон
-      (damage . ,got-damage))))
+      'damage got-damage}
 
    ; если умер, то умер :)
-   (dead . ,(list->ff `(
-      (tick . ,do-nothing)
-      (sound . ,do-nothing)
-      (damage . ,do-nothing)))))))
+   'dead {
+      'tick do-nothing
+      'sound do-nothing
+      'damage do-nothing}})
 
 (define (invoke-state-action action . args)
    #true

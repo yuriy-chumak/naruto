@@ -5,7 +5,7 @@
 (define-library (lib gl config)
 (export config) (import (otus lisp))
 (begin
-   (define config (list->ff `(
+   (define config (pairs->ff `(
       ; напомню, что мы используем фиксированный шрифт размера 9*16
       (width  . ,(* 1  9 80))      ; 80 знакомест в ширину
       (height . ,(* 1 16 25))))))) ; 25 знакомест в высоту
@@ -270,7 +270,7 @@
 
 ; draw
 (gl:set-renderer (lambda (mouse)
-   ; тут мы поворачиваем нашего шероя в сторону мышки
+   ; тут мы поворачиваем нашего героя в сторону мышки
    (unless (world-busy?) (if (> ((hero 'get) 'health) 0)
       (let*((mousetile (xy:screen->tile mouse))
             (herotile ((hero 'get-location)))
@@ -514,7 +514,7 @@
                               (less? a b)) ; todo: отсортировать по инициативности
                         (interact 'npcs #false))))
                (for-each (lambda (creature)
-                     ;; (print "NPC: " creature)
+                     (print "NPC: " creature)
                      (let*((creature creature)
                            (state ((creature 'get) 'state))
                            ;; (_ (print "NPC state: " state))
